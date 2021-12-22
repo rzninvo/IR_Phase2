@@ -1,4 +1,5 @@
 from __future__ import unicode_literals
+from re import T
 from hazm import *
 import math
 
@@ -52,7 +53,7 @@ class IR:
                     positional_index[preprocessed_data[docID][i]][1][docID] = [i]
         return positional_index
 
-    def tf_idf(term_frequency, doc_frequency, N):
+    def tf_idf(self, term_frequency, doc_frequency, N):
         tf = 1 + math.log10(term_frequency)
         idf = math.log10(N / doc_frequency)
         tf_idf_weight = tf * idf
@@ -67,16 +68,46 @@ class IR:
             weighted_posting_list[term].append(len(positional_index[term][1].keys()))
             weighted_posting_list[term].append({})
             for docID in positional_index[term][1].keys():
-                weighted_posting_list[term][1][docID] = self.tf_idf(len(positional_index[term][1][docID]),  weighted_posting_list[term][0], len(content))
+                weighted_posting_list[term][1][docID] = self.tf_idf((len(positional_index[term][1][docID])), weighted_posting_list[term][0], len(content))
         return weighted_posting_list
 
+    def get_weighted_query(self, weighted_posting_list, N, query):
+        preprocessed_query = self.preprocess(query, 1)
+        query_posting = {}
+        weighted_query = {}
+        for term in preprocessed_query:
+            if term in weighted_posting_list:
+                if term in query_posting.keys():
+                    query_posting[term] += 1
+                else:
+                    query_posting[term] = 1
+        for term in query_posting.keys():
+            weighted_query[term] = self.tf_idf(query_posting[term], len(weighted_posting_list[term][1].keys()), N)
+        return weighted_query
 
+    def cosine_similarity_search(self, content, query):
+        weighted_posting_list = self.get_weighted_posting_list(content)
+        weighted_query = self.get_weighted_query(weighted_posting_list, len(content), query)
+        similarity_list = []
+        for docID in range(len(content)):
+            sigma_dot = 0
+            sigma_query = 0
+            sigma_doc = 0
+            for term in weighted_query.keys():
+                if docID in weighted_posting_list[term][1].keys():
+                    sigma_dot += weighted_query[term] * weighted_posting_list[term][1][docID]
+                    sigma_doc += (weighted_posting_list[term][1][docID] * weighted_posting_list[term][1][docID])
+                sigma_query += (weighted_query[term] * weighted_query[term])
+            if sigma_doc != 0 and sigma_query != 0:
+                similarity_list.append([docID, sigma_dot / (math.sqrt(sigma_doc) * math.sqrt(sigma_query))])
+        return similarity_list#sorted(similarity_list, key=lambda x: similarity_list[x][1])
+        
 
     def delete_stop_words(self, positional_index):
         terms = positional_index.keys()
         freq_terms = sorted(terms, key= lambda x: positional_index[x][0], reverse= True)
         for i in range(10):
-            print(freq_terms[i])
+            #print(freq_terms[i])
             positional_index.pop(freq_terms[i], None)
     
     def search(self, query, positional_index):
