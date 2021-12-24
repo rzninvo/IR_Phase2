@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 from re import T
+from typing import ChainMap
 from hazm import *
 import math
 
@@ -85,23 +86,51 @@ class IR:
             weighted_query[term] = self.tf_idf(query_posting[term], len(weighted_posting_list[term][1].keys()), N)
         return weighted_query
 
-    def cosine_similarity_search(self, content, query):
-        weighted_posting_list = self.get_weighted_posting_list(content)
-        weighted_query = self.get_weighted_query(weighted_posting_list, len(content), query)
-        similarity_list = []
-        for docID in range(len(content)):
-            sigma_dot = 0
-            sigma_query = 0
-            sigma_doc = 0
-            for term in weighted_query.keys():
-                if docID in weighted_posting_list[term][1].keys():
-                    sigma_dot += weighted_query[term] * weighted_posting_list[term][1][docID]
-                    sigma_doc += (weighted_posting_list[term][1][docID] * weighted_posting_list[term][1][docID])
-                sigma_query += (weighted_query[term] * weighted_query[term])
-            if sigma_doc != 0 and sigma_query != 0:
-                similarity_list.append([docID, sigma_dot / (math.sqrt(sigma_doc) * math.sqrt(sigma_query))])
-        return similarity_list#sorted(similarity_list, key=lambda x: similarity_list[x][1])
+    def cosine_similarity_search(self, N, weighted_posting_list, champion_list, query, speedup = 0):
+        if speedup == 0:
+            weighted_query = self.get_weighted_query(weighted_posting_list, N, query)
+            similarity_list = []
+            for docID in range(N):
+                sigma_dot = 0
+                sigma_query = 0
+                sigma_doc = 0
+                for term in weighted_query.keys():
+                    if docID in weighted_posting_list[term][1].keys():
+                        sigma_dot += weighted_query[term] * weighted_posting_list[term][1][docID]
+                        sigma_doc += (weighted_posting_list[term][1][docID] * weighted_posting_list[term][1][docID])
+                    sigma_query += (weighted_query[term] * weighted_query[term])
+                if sigma_doc != 0 and sigma_query != 0:
+                    similarity_list.append([docID, sigma_dot / (math.sqrt(sigma_doc) * math.sqrt(sigma_query))])
+            return sorted(similarity_list, key=lambda x: x[1], reverse=True)
+        else:
+            weighted_query = self.get_weighted_query(champion_list, N, query)
+            similarity_list = []
+            for docID in range(N):
+                sigma_dot = 0
+                sigma_query = 0
+                sigma_doc = 0
+                for term in weighted_query.keys():
+                    if docID in champion_list[term][1].keys():
+                        sigma_dot += weighted_query[term] * champion_list[term][1][docID]
+                        sigma_doc += (champion_list[term][1][docID] * champion_list[term][1][docID])
+                    sigma_query += (weighted_query[term] * weighted_query[term])
+                if sigma_doc != 0 and sigma_query != 0:
+                    similarity_list.append([docID, sigma_dot / (math.sqrt(sigma_doc) * math.sqrt(sigma_query))])
+            return sorted(similarity_list, key=lambda x: x[1], reverse=True)
         
+    def get_champion_list(self, weighted_posting_list):
+        champion_list = {}
+        for term in weighted_posting_list:
+            champion_list[term] = []
+            champion_list[term].append(weighted_posting_list[term][0])
+            champion_list[term].append({})
+            doc_list = sorted(weighted_posting_list[term][1].keys(), key= lambda x: weighted_posting_list[term][1][x], reverse = True)
+            k = 20
+            if len(doc_list) < 20:
+                k = len(doc_list)
+            for i in range(k):
+                champion_list[term][1][doc_list[i]] = weighted_posting_list[term][1][doc_list[i]]
+        return champion_list
 
     def delete_stop_words(self, positional_index):
         terms = positional_index.keys()
@@ -150,4 +179,10 @@ class IR:
             print('Sub Query: ',' '.join(query_results[0][i]), end= '\n')
             for doc in query_results[2][i].keys():
                 print('Title:', title[doc])
-                
+
+    def print_cosine_search_result(self, query_results, title, k= 10):
+        if len(query_results) < k:
+            k = len(query_results)
+        for i in range(k):
+            print(f'[{query_results[i][0]}, {query_results[i][1]}]')
+            print(f'Title: {title[query_results[i][0]]}')
