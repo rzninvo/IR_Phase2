@@ -64,13 +64,20 @@ class IR:
         positional_index = self.get_positional_index(content)
         self.delete_stop_words(positional_index)
         weighted_posting_list = {}
+        doc_lengths = {}
         for term in positional_index.keys():
             weighted_posting_list[term] = []
             weighted_posting_list[term].append(len(positional_index[term][1].keys()))
             weighted_posting_list[term].append({})
             for docID in positional_index[term][1].keys():
                 weighted_posting_list[term][1][docID] = self.tf_idf((len(positional_index[term][1][docID])), weighted_posting_list[term][0], len(content))
-        return weighted_posting_list
+                if docID in doc_lengths.keys():
+                    doc_lengths[docID] += (weighted_posting_list[term][1][docID] * weighted_posting_list[term][1][docID])
+                else:
+                    doc_lengths[docID] = weighted_posting_list[term][1][docID] * weighted_posting_list[term][1][docID]
+        for docID in doc_lengths.keys():
+            doc_lengths[docID] = math.sqrt(doc_lengths[docID])
+        return [weighted_posting_list, doc_lengths]
 
     def get_weighted_query(self, weighted_posting_list, N, query):
         preprocessed_query = self.preprocess(query, 1)
@@ -83,10 +90,10 @@ class IR:
                 else:
                     query_posting[term] = 1
         for term in query_posting.keys():
-            weighted_query[term] = self.tf_idf(query_posting[term], len(weighted_posting_list[term][1].keys()), N)
+            weighted_query[term] = self.tf_idf(query_posting[term], weighted_posting_list[term][0], N)
         return weighted_query
 
-    def cosine_similarity_search(self, N, weighted_posting_list, champion_list, query, speedup = 0):
+    def cosine_similarity_search(self, N, weighted_posting_list, doc_lengths, champion_list, query, speedup = 0):
         if speedup == 0:
             weighted_query = self.get_weighted_query(weighted_posting_list, N, query)
             similarity_list = []
@@ -97,10 +104,8 @@ class IR:
                 for term in weighted_query.keys():
                     if docID in weighted_posting_list[term][1].keys():
                         sigma_dot += weighted_query[term] * weighted_posting_list[term][1][docID]
-                        sigma_doc += (weighted_posting_list[term][1][docID] * weighted_posting_list[term][1][docID])
-                    sigma_query += (weighted_query[term] * weighted_query[term])
-                if sigma_doc != 0 and sigma_query != 0:
-                    similarity_list.append([docID, sigma_dot / (math.sqrt(sigma_doc) * math.sqrt(sigma_query))])
+                        sigma_query += (weighted_query[term] * weighted_query[term])
+                        similarity_list.append([docID, sigma_dot / (doc_lengths[docID] * math.sqrt(sigma_query))])
             return sorted(similarity_list, key=lambda x: x[1], reverse=True)
         else:
             weighted_query = self.get_weighted_query(champion_list, N, query)
@@ -112,10 +117,8 @@ class IR:
                 for term in weighted_query.keys():
                     if docID in champion_list[term][1].keys():
                         sigma_dot += weighted_query[term] * champion_list[term][1][docID]
-                        sigma_doc += (champion_list[term][1][docID] * champion_list[term][1][docID])
-                    sigma_query += (weighted_query[term] * weighted_query[term])
-                if sigma_doc != 0 and sigma_query != 0:
-                    similarity_list.append([docID, sigma_dot / (math.sqrt(sigma_doc) * math.sqrt(sigma_query))])
+                        sigma_query += (weighted_query[term] * weighted_query[term])
+                        similarity_list.append([docID, sigma_dot / (doc_lengths[docID] * math.sqrt(sigma_query))])
             return sorted(similarity_list, key=lambda x: x[1], reverse=True)
         
     def get_champion_list(self, weighted_posting_list):
@@ -126,7 +129,7 @@ class IR:
             champion_list[term].append({})
             doc_list = sorted(weighted_posting_list[term][1].keys(), key= lambda x: weighted_posting_list[term][1][x], reverse = True)
             k = 20
-            if len(doc_list) < 20:
+            if len(doc_list) < k:
                 k = len(doc_list)
             for i in range(k):
                 champion_list[term][1][doc_list[i]] = weighted_posting_list[term][1][doc_list[i]]
