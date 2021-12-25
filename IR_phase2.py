@@ -100,12 +100,12 @@ class IR:
             for docID in range(N):
                 sigma_dot = 0
                 sigma_query = 0
-                sigma_doc = 0
                 for term in weighted_query.keys():
                     if docID in weighted_posting_list[term][1].keys():
                         sigma_dot += weighted_query[term] * weighted_posting_list[term][1][docID]
-                        sigma_query += (weighted_query[term] * weighted_query[term])
-                        similarity_list.append([docID, sigma_dot / (doc_lengths[docID] * math.sqrt(sigma_query))])
+                    sigma_query += (weighted_query[term] * weighted_query[term])
+                if docID in doc_lengths.keys():
+                    similarity_list.append([docID, sigma_dot / (doc_lengths[docID] * math.sqrt(sigma_query))])
             return sorted(similarity_list, key=lambda x: x[1], reverse=True)
         else:
             weighted_query = self.get_weighted_query(champion_list, N, query)
@@ -113,12 +113,12 @@ class IR:
             for docID in range(N):
                 sigma_dot = 0
                 sigma_query = 0
-                sigma_doc = 0
                 for term in weighted_query.keys():
                     if docID in champion_list[term][1].keys():
                         sigma_dot += weighted_query[term] * champion_list[term][1][docID]
-                        sigma_query += (weighted_query[term] * weighted_query[term])
-                        similarity_list.append([docID, sigma_dot / (doc_lengths[docID] * math.sqrt(sigma_query))])
+                    sigma_query += (weighted_query[term] * weighted_query[term])
+                if docID in doc_lengths.keys():
+                    similarity_list.append([docID, sigma_dot / (doc_lengths[docID] * math.sqrt(sigma_query))])
             return sorted(similarity_list, key=lambda x: x[1], reverse=True)
         
     def get_champion_list(self, weighted_posting_list):
@@ -189,3 +189,20 @@ class IR:
         for i in range(k):
             print(f'[{query_results[i][0]}, {query_results[i][1]}]')
             print(f'Title: {title[query_results[i][0]]}')
+
+if __name__ == '__main__':
+    data = pd.read_excel(r'IR.xlsx')
+    content = data['content'].tolist()
+    titles = data['title'].tolist()
+    weighted_posting_list, doclengths = IR().get_weighted_posting_list(content)
+    champion_list = IR().get_champion_list(weighted_posting_list)
+    print('Enter 1 for normal calculation or 2 for sped up calculation')
+    option = input()
+    print('Enter query:')
+    query = input()
+    if option == '1':
+        query_result = IR().cosine_similarity_search(len(content), weighted_posting_list, doclengths, champion_list, query)
+        IR().print_cosine_search_result(query_result, titles)
+    else:
+        query_result = IR().cosine_similarity_search(len(content), weighted_posting_list, doclengths, champion_list, query, speedup= 1)
+        IR().print_cosine_search_result(query_result, titles)
